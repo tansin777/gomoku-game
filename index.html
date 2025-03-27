@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>精美五子棋游戏</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        
+        h1 {
+            color: #3a4a6d;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+        }
+        
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .board-container {
+            position: relative;
+            margin: 20px 0;
+        }
+        
+        #board {
+            background-color: #e6c88c;
+            border: 2px solid #8b5a2b;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 8px 16px;
+            background: linear-gradient(to bottom, #4a6baf, #3a4a6d);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        button:hover {
+            background: linear-gradient(to bottom, #3a4a6d, #2a3a5d);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        .status {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #3a4a6d;
+            height: 24px;
+        }
+        
+        .stone {
+            position: absolute;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+        }
+        
+        .stone.black {
+            background: radial-gradient(circle at 30% 30%, #666, #000);
+            width: 28px;
+            height: 28px;
+        }
+        
+        .stone.white {
+            background: radial-gradient(circle at 30% 30%, #fff, #ddd);
+            width: 28px;
+            height: 28px;
+        }
+        
+        .stone.highlight {
+            box-shadow: 0 0 10px 5px rgba(255, 215, 0, 0.7);
+            z-index: 10;
+        }
+        
+        .grid-line {
+            position: absolute;
+            background-color: #333;
+        }
+        
+        .grid-line.horizontal {
+            width: 100%;
+            height: 1px;
+        }
+        
+        .grid-line.vertical {
+            width: 1px;
+            height: 100%;
+        }
+        
+        .star-point {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background-color: #333;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <h1>精美五子棋游戏</h1>
+    <div class="game-container">
+        <div class="status" id="status">黑方回合</div>
+        <div class="controls">
+            <button id="restartBtn">重新开始</button>
+            <button id="undoBtn">悔棋</button>
+        </div>
+        <div class="board-container">
+            <canvas id="board" width="450" height="450"></canvas>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('board');
+            const ctx = canvas.getContext('2d');
+            const statusDisplay = document.getElementById('status');
+            const restartBtn = document.getElementById('restartBtn');
+            const undoBtn = document.getElementById('undoBtn');
+            
+            const BOARD_SIZE = 15;
+            const CELL_SIZE = canvas.width / (BOARD_SIZE + 1);
+            const STONE_RADIUS = CELL_SIZE * 0.4;
+            
+            let board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+            let currentPlayer = 1; // 1 for black, 2 for white
+            let gameOver = false;
+            let moveHistory = [];
+            
+            // Initialize the board
+            initBoard();
+            
+            // Event listeners
+            canvas.addEventListener('click', handleBoardClick);
+            restartBtn.addEventListener('click', restartGame);
+            undoBtn.addEventListener('click', undoMove);
+            
+            function initBoard() {
+                // Draw board background
+                ctx.fillStyle = '#e6c88c';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw grid lines
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1;
+                
+                for (let i = 0; i < BOARD_SIZE; i++) {
+                    // Horizontal lines
+                    ctx.beginPath();
+                    ctx.moveTo(CELL_SIZE, CELL_SIZE * (i + 1));
+                    ctx.lineTo(CELL_SIZE * BOARD_SIZE, CELL_SIZE * (i + 1));
+                    ctx.stroke();
+                    
+                    // Vertical lines
+                    ctx.beginPath();
+                    ctx.moveTo(CELL_SIZE * (i + 1), CELL_SIZE);
+                    ctx.lineTo(CELL_SIZE * (i + 1), CELL_SIZE * BOARD_SIZE);
+                    ctx.stroke();
+                }
+                
+                // Draw star points (5 traditional points)
+                const starPoints = [
+                    [3, 3], [3, 11], [7, 7], [11, 3], [11, 11]
+                ];
+                
+                ctx.fillStyle = '#333';
+                starPoints.forEach(point => {
+                    const [x, y] = point;
+                    ctx.beginPath();
+                    ctx.arc(
+                        CELL_SIZE * (x + 1), 
+                        CELL_SIZE * (y + 1), 
+                        3, 0, Math.PI * 2
+                    );
+                    ctx.fill();
+                });
+            }
+            
+            function handleBoardClick(e) {
+                if (gameOver) return;
+                
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Calculate which cell was clicked
+                const col = Math.round(x / CELL_SIZE) - 1;
+                const row = Math.round(y / CELL_SIZE) - 1;
+                
+                // Check if the move is valid
+                if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE && board[row][col] === 0) {
+                    // Record the move
+                    moveHistory.push({
+                        row,
+                        col,
+                        player: currentPlayer
+                    });
+                    
+                    // Place the stone
+                    board[row][col] = currentPlayer;
+                    drawStone(row, col, currentPlayer);
+                    
+                    // Check for win
+                    if (checkWin(row, col, currentPlayer)) {
+                        statusDisplay.textContent = currentPlayer === 1 ? '黑方获胜！' : '白方获胜！';
+                        gameOver = true;
+                        highlightWinningStones(row, col, currentPlayer);
+                        return;
+                    }
+                    
+                    // Check for draw
+                    if (moveHistory.length === BOARD_SIZE * BOARD_SIZE) {
+                        statusDisplay.textContent = '平局！';
+                        gameOver = true;
+                        return;
+                    }
+                    
+                    // Switch player
+                    currentPlayer = currentPlayer === 1 ? 2 : 1;
+                    statusDisplay.textContent = currentPlayer === 1 ? '黑方回合' : '白方回合';
+                }
+            }
+            
+            function drawStone(row, col, player) {
+                const x = (col + 1) * CELL_SIZE;
+                const y = (row + 1) * CELL_SIZE;
+                
+                const gradient = ctx.createRadialGradient(
+                    x - STONE_RADIUS * 0.3, y - STONE_RADIUS * 0.3, STONE_RADIUS * 0.1,
+                    x, y, STONE_RADIUS
+                );
+                
+                if (player === 1) { // Black stone
+                    gradient.addColorStop(0, '#666');
+                    gradient.addColorStop(1, '#000');
+                } else { // White stone
+                    gradient.addColorStop(0, '#fff');
+                    gradient.addColorStop(1, '#ddd');
+                }
+                
+                ctx.beginPath();
+                ctx.arc(x, y, STONE_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                
+                // Add shadow
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+                ctx.shadowBlur = 5;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+                ctx.fill();
+                ctx.shadowColor = 'transparent';
+            }
+            
+            function checkWin(row, col, player) {
+                const directions = [
+                    [0, 1],   // horizontal
+                    [1, 0],   // vertical
+                    [1, 1],   // diagonal down-right
+                    [1, -1]   // diagonal down-left
+                ];
+                
+                for (const [dx, dy] of directions) {
+                    let count = 1;
+                    
+                    // Check in positive direction
+                    for (let i = 1; i < 5; i++) {
+                        const newRow = row + i * dx;
+                        const newCol = col + i * dy;
+                        if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE || board[newRow][newCol] !== player) {
+                            break;
+                        }
+                        count++;
+                    }
+                    
+                    // Check in negative direction
+                    for (let i = 1; i < 5; i++) {
+                        const newRow = row - i * dx;
+                        const newCol = col - i * dy;
+                        if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE || board[newRow][newCol] !== player) {
+                            break;
+                        }
+                        count++;
+                    }
+                    
+                    if (count >= 5) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+            
+            function highlightWinningStones(row, col, player) {
+                const directions = [
+                    [0, 1],   // horizontal
+                    [1, 0],   // vertical
+                    [1, 1],   // diagonal down-right
+                    [1, -1]   // diagonal down-left
+                ];
+                
+                for (const [dx, dy] of directions) {
+                    let stones = [{row, col}];
+                    
+                    // Check in positive direction
+                    for (let i = 1; i < 5; i++) {
+                        const newRow = row + i * dx;
+                        const newCol = col + i * dy;
+                        if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE || board[newRow][newCol] !== player) {
+                            break;
+                        }
+                        stones.push({row: newRow, col: newCol});
+                    }
+                    
+                    // Check in negative direction
+                    for (let i = 1; i < 5; i++) {
+                        const newRow = row - i * dx;
+                        const newCol = col - i * dy;
+                        if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE || board[newRow][newCol] !== player) {
+                            break;
+                        }
+                        stones.push({row: newRow, col: newCol});
+                    }
+                    
+                    if (stones.length >= 5) {
+                        // Highlight the winning stones
+                        stones.forEach(stone => {
+                            const x = (stone.col + 1) * CELL_SIZE;
+                            const y = (stone.row + 1) * CELL_SIZE;
+                            
+                            ctx.beginPath();
+                            ctx.arc(x, y, STONE_RADIUS * 1.1, 0, Math.PI * 2);
+                            ctx.fillStyle = 'rgba(255, 215, 0, 0.5)';
+                            ctx.fill();
+                            
+                            // Redraw the stone on top
+                            drawStone(stone.row, stone.col, player);
+                        });
+                        
+                        break;
+                    }
+                }
+            }
+            
+            function restartGame() {
+                board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+                currentPlayer = 1;
+                gameOver = false;
+                moveHistory = [];
+                statusDisplay.textContent = '黑方回合';
+                
+                // Clear the canvas and redraw the board
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                initBoard();
+            }
+            
+            function undoMove() {
+                if (gameOver || moveHistory.length === 0) return;
+                
+                const lastMove = moveHistory.pop();
+                board[lastMove.row][lastMove.col] = 0;
+                currentPlayer = lastMove.player;
+                statusDisplay.textContent = currentPlayer === 1 ? '黑方回合' : '白方回合';
+                
+                // Redraw the entire board
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                initBoard();
+                
+                // Redraw all stones except the last one
+                moveHistory.forEach(move => {
+                    drawStone(move.row, move.col, move.player);
+                });
+            }
+        });
+    </script>
+</body>
+</html>
