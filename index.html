@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>精美五子棋游戏</title>
+    <title>智能五子棋游戏</title>
     <style>
         body {
             font-family: 'Microsoft YaHei', sans-serif;
@@ -50,6 +50,7 @@
             justify-content: center;
             gap: 15px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
         
         button {
@@ -70,12 +71,35 @@
             box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
         
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
         .status {
             font-size: 18px;
             font-weight: bold;
             margin-bottom: 15px;
             color: #3a4a6d;
             height: 24px;
+        }
+        
+        .game-mode {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .game-mode label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .game-mode input {
+            margin-right: 5px;
         }
         
         .stone {
@@ -126,11 +150,38 @@
             border-radius: 50%;
             transform: translate(-50%, -50%);
         }
+        
+        .difficulty {
+            margin-top: 10px;
+            display: none;
+        }
+        
+        .difficulty.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
-    <h1>精美五子棋游戏</h1>
+    <h1>智能五子棋游戏</h1>
     <div class="game-container">
+        <div class="game-mode">
+            <label>
+                <input type="radio" name="gameMode" value="pvp" checked> 玩家对战
+            </label>
+            <label>
+                <input type="radio" name="gameMode" value="pvc"> 人机对战
+            </label>
+        </div>
+        
+        <div class="difficulty" id="difficultySettings">
+            <label>AI难度：</label>
+            <select id="aiDifficulty">
+                <option value="easy">简单</option>
+                <option value="medium" selected>中等</option>
+                <option value="hard">困难</option>
+            </select>
+        </div>
+        
         <div class="status" id="status">黑方回合</div>
         <div class="controls">
             <button id="restartBtn">重新开始</button>
@@ -148,6 +199,9 @@
             const statusDisplay = document.getElementById('status');
             const restartBtn = document.getElementById('restartBtn');
             const undoBtn = document.getElementById('undoBtn');
+            const gameModeRadios = document.querySelectorAll('input[name="gameMode"]');
+            const difficultySettings = document.getElementById('difficultySettings');
+            const aiDifficultySelect = document.getElementById('aiDifficulty');
             
             const BOARD_SIZE = 15;
             const CELL_SIZE = canvas.width / (BOARD_SIZE + 1);
@@ -157,6 +211,8 @@
             let currentPlayer = 1; // 1 for black, 2 for white
             let gameOver = false;
             let moveHistory = [];
+            let gameMode = 'pvp'; // 'pvp' or 'pvc'
+            let aiDifficulty = 'medium';
             
             // Initialize the board
             initBoard();
@@ -165,6 +221,22 @@
             canvas.addEventListener('click', handleBoardClick);
             restartBtn.addEventListener('click', restartGame);
             undoBtn.addEventListener('click', undoMove);
+            
+            gameModeRadios.forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    gameMode = e.target.value;
+                    if (gameMode === 'pvc') {
+                        difficultySettings.classList.add('active');
+                    } else {
+                        difficultySettings.classList.remove('active');
+                    }
+                    restartGame();
+                });
+            });
+            
+            aiDifficultySelect.addEventListener('change', (e) => {
+                aiDifficulty = e.target.value;
+            });
             
             function initBoard() {
                 // Draw board background
@@ -209,6 +281,7 @@
             
             function handleBoardClick(e) {
                 if (gameOver) return;
+                if (gameMode === 'pvc' && currentPlayer === 2) return; // AI's turn
                 
                 const rect = canvas.getBoundingClientRect();
                 const x = e.clientX - rect.left;
@@ -220,35 +293,55 @@
                 
                 // Check if the move is valid
                 if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE && board[row][col] === 0) {
-                    // Record the move
-                    moveHistory.push({
-                        row,
-                        col,
-                        player: currentPlayer
-                    });
+                    makeMove(row, col, currentPlayer);
                     
-                    // Place the stone
-                    board[row][col] = currentPlayer;
-                    drawStone(row, col, currentPlayer);
-                    
-                    // Check for win
-                    if (checkWin(row, col, currentPlayer)) {
-                        statusDisplay.textContent = currentPlayer === 1 ? '黑方获胜！' : '白方获胜！';
-                        gameOver = true;
-                        highlightWinningStones(row, col, currentPlayer);
-                        return;
+                    // If in PVC mode and game isn't over, let AI make a move
+                    if (gameMode === 'pvc' && !gameOver && currentPlayer === 2) {
+                        setTimeout(() => {
+                            const aiMove = getAIMove();
+                            if (aiMove) {
+                                makeMove(aiMove.row, aiMove.col, currentPlayer);
+                            }
+                        }, 500);
                     }
-                    
-                    // Check for draw
-                    if (moveHistory.length === BOARD_SIZE * BOARD_SIZE) {
-                        statusDisplay.textContent = '平局！';
-                        gameOver = true;
-                        return;
-                    }
-                    
-                    // Switch player
-                    currentPlayer = currentPlayer === 1 ? 2 : 1;
+                }
+            }
+            
+            function makeMove(row, col, player) {
+                // Record the move
+                moveHistory.push({
+                    row,
+                    col,
+                    player
+                });
+                
+                // Place the stone
+                board[row][col] = player;
+                drawStone(row, col, player);
+                
+                // Check for win
+                if (checkWin(row, col, player)) {
+                    const winner = player === 1 ? '黑方' : (gameMode === 'pvp' ? '白方' : 'AI');
+                    statusDisplay.textContent = `${winner}获胜！`;
+                    gameOver = true;
+                    highlightWinningStones(row, col, player);
+                    return;
+                }
+                
+                // Check for draw
+                if (moveHistory.length === BOARD_SIZE * BOARD_SIZE) {
+                    statusDisplay.textContent = '平局！';
+                    gameOver = true;
+                    return;
+                }
+                
+                // Switch player
+                currentPlayer = player === 1 ? 2 : 1;
+                
+                if (gameMode === 'pvp') {
                     statusDisplay.textContent = currentPlayer === 1 ? '黑方回合' : '白方回合';
+                } else {
+                    statusDisplay.textContent = currentPlayer === 1 ? '你的回合' : 'AI思考中...';
                 }
             }
             
@@ -378,7 +471,12 @@
                 currentPlayer = 1;
                 gameOver = false;
                 moveHistory = [];
-                statusDisplay.textContent = '黑方回合';
+                
+                if (gameMode === 'pvp') {
+                    statusDisplay.textContent = '黑方回合';
+                } else {
+                    statusDisplay.textContent = '你的回合';
+                }
                 
                 // Clear the canvas and redraw the board
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -387,20 +485,169 @@
             
             function undoMove() {
                 if (gameOver || moveHistory.length === 0) return;
+                if (gameMode === 'pvc' && moveHistory.length === 1 && currentPlayer === 2) return;
                 
-                const lastMove = moveHistory.pop();
-                board[lastMove.row][lastMove.col] = 0;
-                currentPlayer = lastMove.player;
-                statusDisplay.textContent = currentPlayer === 1 ? '黑方回合' : '白方回合';
+                // In PVC mode, undo both player's and AI's last move
+                const movesToUndo = (gameMode === 'pvc' && currentPlayer === 1 && moveHistory.length >= 2) ? 2 : 1;
+                
+                for (let i = 0; i < movesToUndo; i++) {
+                    const lastMove = moveHistory.pop();
+                    board[lastMove.row][lastMove.col] = 0;
+                    currentPlayer = lastMove.player;
+                }
+                
+                if (gameMode === 'pvp') {
+                    statusDisplay.textContent = currentPlayer === 1 ? '黑方回合' : '白方回合';
+                } else {
+                    statusDisplay.textContent = '你的回合';
+                }
                 
                 // Redraw the entire board
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 initBoard();
                 
-                // Redraw all stones except the last one
+                // Redraw all stones except the last one(s)
                 moveHistory.forEach(move => {
                     drawStone(move.row, move.col, move.player);
                 });
+            }
+            
+            // AI Logic
+            function getAIMove() {
+                // First check if AI can win in the next move
+                for (let row = 0; row < BOARD_SIZE; row++) {
+                    for (let col = 0; col < BOARD_SIZE; col++) {
+                        if (board[row][col] === 0) {
+                            board[row][col] = 2; // Try white stone
+                            if (checkWin(row, col, 2)) {
+                                board[row][col] = 0; // Undo try
+                                return { row, col };
+                            }
+                            board[row][col] = 0; // Undo try
+                        }
+                    }
+                }
+                
+                // Then check if player can win in the next move and block them
+                for (let row = 0; row < BOARD_SIZE; row++) {
+                    for (let col = 0; col < BOARD_SIZE; col++) {
+                        if (board[row][col] === 0) {
+                            board[row][col] = 1; // Try black stone
+                            if (checkWin(row, col, 1)) {
+                                board[row][col] = 0; // Undo try
+                                return { row, col };
+                            }
+                            board[row][col] = 0; // Undo try
+                        }
+                    }
+                }
+                
+                // Otherwise, choose the best move based on difficulty
+                return getBestMove();
+            }
+            
+            function getBestMove() {
+                const emptyCells = [];
+                for (let row = 0; row < BOARD_SIZE; row++) {
+                    for (let col = 0; col < BOARD_SIZE; col++) {
+                        if (board[row][col] === 0) {
+                            emptyCells.push({ row, col, score: 0 });
+                        }
+                    }
+                }
+                
+                if (emptyCells.length === 0) return null;
+                
+                // Evaluate each empty cell
+                emptyCells.forEach(cell => {
+                    cell.score = evaluateCell(cell.row, cell.col);
+                });
+                
+                // Sort by score (descending)
+                emptyCells.sort((a, b) => b.score - a.score);
+                
+                // Based on difficulty, choose how to select the move
+                let selectedIndex = 0;
+                
+                if (aiDifficulty === 'easy') {
+                    // Sometimes make suboptimal moves
+                    const randomFactor = Math.random();
+                    if (randomFactor > 0.7) {
+                        selectedIndex = Math.floor(Math.random() * Math.min(5, emptyCells.length));
+                    }
+                } else if (aiDifficulty === 'medium') {
+                    // Mostly good moves, occasionally not the best
+                    const randomFactor = Math.random();
+                    if (randomFactor > 0.9) {
+                        selectedIndex = Math.floor(Math.random() * Math.min(3, emptyCells.length));
+                    }
+                }
+                // Hard always picks the best move
+                
+                return { row: emptyCells[selectedIndex].row, col: emptyCells[selectedIndex].col };
+            }
+            
+            function evaluateCell(row, col) {
+                let score = 0;
+                const directions = [
+                    [0, 1],   // horizontal
+                    [1, 0],   // vertical
+                    [1, 1],   // diagonal down-right
+                    [1, -1]   // diagonal down-left
+                ];
+                
+                // Evaluate for both players
+                for (let player = 1; player <= 2; player++) {
+                    directions.forEach(([dx, dy]) => {
+                        // Check in both directions
+                        let count = 1; // current cell
+                        
+                        // Positive direction
+                        for (let i = 1; i < 5; i++) {
+                            const newRow = row + i * dx;
+                            const newCol = col + i * dy;
+                            if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE) break;
+                            if (board[newRow][newCol] === (player === 1 ? 2 : 1)) break; // opponent's stone
+                            if (board[newRow][newCol] === 0) {
+                                count += 0.5; // empty cell counts half
+                                break;
+                            }
+                            count++;
+                        }
+                        
+                        // Negative direction
+                        for (let i = 1; i < 5; i++) {
+                            const newRow = row - i * dx;
+                            const newCol = col - i * dy;
+                            if (newRow < 0 || newRow >= BOARD_SIZE || newCol < 0 || newCol >= BOARD_SIZE) break;
+                            if (board[newRow][newCol] === (player === 1 ? 2 : 1)) break; // opponent's stone
+                            if (board[newRow][newCol] === 0) {
+                                count += 0.5; // empty cell counts half
+                                break;
+                            }
+                            count++;
+                        }
+                        
+                        // Score based on sequence length
+                        if (count >= 5) {
+                            score += player === 2 ? 100000 : 50000; // winning move
+                        } else if (count === 4) {
+                            score += player === 2 ? 1000 : 500; // 4 in a row
+                        } else if (count === 3) {
+                            score += player === 2 ? 100 : 50; // 3 in a row
+                        } else if (count === 2) {
+                            score += player === 2 ? 10 : 5; // 2 in a row
+                        }
+                    });
+                }
+                
+                // Center control bonus
+                const centerDist = Math.sqrt(
+                    Math.pow(row - BOARD_SIZE/2, 2) + Math.pow(col - BOARD_SIZE/2, 2)
+                );
+                score += (BOARD_SIZE - centerDist) * 2;
+                
+                return score;
             }
         });
     </script>
